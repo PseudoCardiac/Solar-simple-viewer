@@ -1,0 +1,10 @@
+# キャラクター要素（git管理外）
+characters.js
+character_images/
+
+# Claude Code のローカル設定
+.claude/settings.local.json
+
+# OS / エディタ
+.DS_Store
+Thumbs.db

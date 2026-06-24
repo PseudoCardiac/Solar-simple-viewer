@@ -1,0 +1,1066 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>太陽系 3D ビューワー</title>
+<style>
+  :root {
+    --panel-bg: rgba(12, 16, 28, 0.92);
+    --accent: #6cc5ff;
+  }
+  * { box-sizing: border-box; }
+  html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #05070f;
+    color: #e9eef7;
+    font-family: "Segoe UI", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+  }
+  #app { position: fixed; inset: 0; }
+  canvas { display: block; }
+
+  /* ヘッダー */
+  #header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    pointer-events: none;
+    z-index: 5;
+  }
+  #header h1 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-shadow: 0 2px 12px rgba(0,0,0,0.8);
+  }
+  #header .hint {
+    font-size: 12px;
+    color: #9fb0c8;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+  }
+
+  /* コントロールパネル */
+  #controls {
+    position: fixed;
+    top: 14px; right: 18px;
+    display: flex;
+    gap: 8px;
+    z-index: 6;
+  }
+  #controls button {
+    background: var(--panel-bg);
+    color: #cfe0f5;
+    border: 1px solid rgba(108, 197, 255, 0.25);
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+    transition: border-color 0.2s, color 0.2s;
+  }
+  #controls button:hover { border-color: var(--accent); color: #fff; }
+  #controls button.active { border-color: var(--accent); color: var(--accent); }
+
+  /* 惑星情報ポップアップ */
+  #popup {
+    position: fixed;
+    top: 50%; right: 24px;
+    transform: translateY(-50%) translateX(120%);
+    width: 340px;
+    max-width: calc(100vw - 40px);
+    background: var(--panel-bg);
+    border: 1px solid rgba(108, 197, 255, 0.3);
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    backdrop-filter: blur(12px);
+    overflow: hidden;
+    opacity: 0;
+    transition: transform 0.45s cubic-bezier(.22,1,.36,1), opacity 0.35s;
+    z-index: 10;
+  }
+  #popup.show { transform: translateY(-50%) translateX(0); opacity: 1; }
+  #popup .preview {
+    height: 180px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at 50% 40%, #1a2030 0%, #060912 100%);
+    overflow: hidden;
+  }
+  #popup canvas.planet-img {
+    width: 150px; height: 150px;
+    border-radius: 50%;
+    box-shadow: 0 0 50px rgba(0,0,0,0.6), inset -18px -18px 40px rgba(0,0,0,0.55);
+    transition: width 0.3s, height 0.3s;
+  }
+  /* イメージキャラクター（地球・火星など） */
+  #popup .char-img {
+    height: 172px;
+    width: auto;
+    max-width: 46%;
+    object-fit: contain;
+    object-position: bottom;
+    display: none;
+    filter: drop-shadow(0 8px 18px rgba(0,0,0,0.55));
+  }
+  /* キャラクター画像があるときは惑星を少し小さくして横並びにする */
+  #popup .preview.has-character { gap: 4px; align-items: flex-end; padding-top: 8px; }
+  #popup .preview.has-character canvas.planet-img { width: 108px; height: 108px; margin-bottom: 26px; }
+  #popup .preview.has-character .char-img { display: block; }
+  #popup .badge {
+    position: absolute;
+    top: 12px; left: 14px;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: #9fb0c8;
+    text-transform: uppercase;
+  }
+  #popup .body { padding: 18px 20px 22px; }
+  #popup h2 { margin: 0 0 2px; font-size: 22px; }
+  #popup .subtitle { color: var(--accent); font-size: 13px; margin-bottom: 12px; }
+  #popup p { margin: 0 0 14px; font-size: 13.5px; line-height: 1.7; color: #d4ddec; }
+  #popup .facts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 14px;
+    font-size: 12px;
+  }
+  #popup .facts div { display: flex; flex-direction: column; gap: 2px; }
+  #popup .facts .label { color: #8195af; font-size: 10.5px; letter-spacing: 0.05em; }
+  #popup .facts .value { color: #eef3fb; font-weight: 600; }
+  /* キャラクター紹介（性格・設定）— 吹き出し風のカード */
+  #popup .char-desc {
+    display: none;
+    margin-top: 16px;
+    padding: 12px 14px;
+    background: linear-gradient(180deg, rgba(108,197,255,0.10), rgba(108,197,255,0.04));
+    border: 1px solid rgba(108,197,255,0.22);
+    border-left: 3px solid var(--accent);
+    border-radius: 10px;
+  }
+  #popup .char-desc.show { display: block; }
+  #popup .char-desc .cd-label {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em;
+    color: var(--accent);
+    margin-bottom: 6px;
+  }
+  #popup .char-desc .cd-text {
+    margin: 0;
+    font-size: 13px; line-height: 1.75; color: #e7eef8;
+  }
+  #popup .close {
+    position: absolute;
+    top: 10px; right: 12px;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255,255,255,0.08);
+    color: #cfe0f5;
+    font-size: 16px;
+    cursor: pointer;
+    line-height: 1;
+  }
+  #popup .close:hover { background: rgba(255,255,255,0.18); }
+
+  /* ローディング */
+  #loading {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: #05070f;
+    color: #6cc5ff;
+    font-size: 14px;
+    letter-spacing: 0.1em;
+    z-index: 50;
+    transition: opacity 0.6s;
+  }
+  #loading.hide { opacity: 0; pointer-events: none; }
+
+  /* テクスチャのライセンス表記 */
+  #credit {
+    position: fixed;
+    left: 14px; bottom: 10px;
+    font-size: 11px;
+    color: #8195af;
+    text-shadow: 0 1px 6px rgba(0,0,0,0.9);
+    z-index: 6;
+  }
+  #credit a { color: #9fb0c8; text-decoration: none; border-bottom: 1px dotted rgba(159,176,200,0.5); }
+  #credit a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ツールチップ（ホバー時の惑星名） */
+  #tooltip {
+    position: fixed;
+    padding: 4px 9px;
+    background: rgba(0,0,0,0.78);
+    border: 1px solid rgba(108,197,255,0.4);
+    border-radius: 6px;
+    font-size: 12px;
+    color: #e9eef7;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-50%, -140%);
+    transition: opacity 0.15s;
+    white-space: nowrap;
+    z-index: 8;
+  }
+</style>
+</head>
+<body>
+  <div id="app"></div>
+
+  <div id="header">
+    <h1>🪐 太陽系 3D ビューワー</h1>
+    <span class="hint">ドラッグで回転 / ホイールでズーム / 惑星をクリックで詳細</span>
+  </div>
+
+  <div id="controls">
+    <button id="btn-pause">⏸ 一時停止</button>
+    <button id="btn-orbits" class="active">軌道線</button>
+    <button id="btn-labels" class="active">名前</button>
+    <button id="btn-moons" class="active">衛星</button>
+    <button id="btn-clouds" class="active">雲・大気</button>
+  </div>
+
+  <div id="tooltip"></div>
+
+  <div id="credit">
+    テクスチャ：
+    <a href="https://www.solarsystemscope.com/textures/" target="_blank" rel="noopener">Solar System Scope</a>
+    （<a href="https://creativecommons.org/licenses/by/4.0/" target="_blank" rel="noopener">CC BY 4.0</a>）
+    ／冥王星・カロン・ガリレオ衛星：<a href="https://www.nasa.gov/" target="_blank" rel="noopener">NASA</a>（Public Domain）
+  </div>
+
+  <div id="popup" aria-live="polite">
+    <button class="close" aria-label="閉じる">✕</button>
+    <div class="preview">
+      <span class="badge"></span>
+      <canvas class="planet-img" width="300" height="300"></canvas>
+      <img class="char-img" alt="" />
+    </div>
+    <div class="body">
+      <h2></h2>
+      <div class="subtitle"></div>
+      <p></p>
+      <div class="facts"></div>
+      <div class="char-desc">
+        <p class="cd-text"></p>
+      </div>
+    </div>
+  </div>
+
+  <div id="loading">太陽系を生成中…</div>
+
+  <script type="importmap">
+  {
+    "imports": {
+      "three": "https://unpkg.com/three@0.160.0/build/three.module.js",
+      "three/addons/": "https://unpkg.com/three@0.160.0/examples/jsm/"
+    }
+  }
+  </script>
+
+  <script type="module">
+  import * as THREE from 'three';
+  import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+
+  // キャラクター紹介文は任意の外部ファイル（characters.js）。
+  // git管理外のため存在しないこともあるので、無ければ黙ってスキップする。
+  let CHARACTER_DESCRIPTIONS = {};
+  try {
+    ({ CHARACTER_DESCRIPTIONS } = await import('./characters.js'));
+  } catch (e) {
+    console.info('characters.js が無いため、キャラクター紹介は非表示になります。');
+  }
+
+  // ----------------------------------------------------------------------
+  // 惑星データ（日本語の解説つき）
+  //   size       : 表示用の半径（実スケールではなく見やすさ優先）
+  //   distance   : 太陽からの表示距離
+  //   speed      : 公転の相対速度
+  //   spin       : 自転速度
+  //   colors     : テクスチャ生成用のベース色
+  //   tilt       : 地軸の傾き（度／実際の値に近づけている）
+  // ----------------------------------------------------------------------
+  const PLANETS = [
+    {
+      key: 'mercury', name: '水星', en: 'Mercury',
+      size: 1.6, distance: 28, speed: 4.15, spin: 0.004, tilt: 0.03, incl: 7.0,
+      colors: ['#8a8073', '#6b6258', '#a89c8c'], texture: 'rocky',
+      map: 'mercury.jpg',
+      subtitle: '太陽系で最も内側の惑星',
+      desc: '太陽に最も近い、最小の惑星です。大気がほとんどないため昼夜の温度差が極端で、昼は約430℃、夜は約-180℃にもなります。表面は月のようにクレーターで覆われています。',
+      facts: { '直径': '4,879 km', '公転周期': '88 日', '自転周期': '59 日', '衛星': 'なし' }
+    },
+    {
+      key: 'venus', name: '金星', en: 'Venus',
+      size: 2.4, distance: 42, speed: 1.62, spin: -0.002, tilt: 177.4, incl: 3.4,
+      colors: ['#e8c98a', '#c9a25e', '#f3ddae'], texture: 'cloudy',
+      map: 'venus_surface.jpg',
+      cloud: { map: 'venus_atmosphere.jpg', opaque: true, scale: 1.025, label: '大気' },
+      subtitle: '灼熱の双子星',
+      desc: '地球とほぼ同じ大きさで「地球の双子」とも呼ばれます。厚い二酸化炭素の大気による温室効果で表面温度は約460℃に達し、太陽系で最も熱い惑星です。自転の向きが他の惑星と逆なのも特徴です。',
+      facts: { '直径': '12,104 km', '公転周期': '225 日', '自転周期': '243 日', '衛星': 'なし' }
+    },
+    {
+      key: 'earth', name: '地球', en: 'Earth',
+      size: 2.6, distance: 58, speed: 1.0, spin: 0.02, tilt: 23.4, incl: 0.0,
+      colors: ['#2a6fb0', '#3f9d52', '#dfe9f5'], texture: 'earth',
+      map: 'earth_day.jpg',
+      normalMap: 'earth_normal.png',
+      cloud: { map: 'earth_clouds.jpg', opaque: false, scale: 1.02, label: '雲' },
+      character: 'character_images/earth_char.png?v=2',
+      moons: [
+        { key: 'moon', name: '月', en: 'Moon', size: 0.7, distance: 6, speed: 2.2,
+          colors: ['#bdbdbd', '#8f8f8f', '#e2e2e2'], texture: 'rocky', map: 'moon.jpg',
+          subtitle: '地球の唯一の衛星',
+          desc: '地球で唯一の自然衛星で、太陽系では5番目に大きな衛星です。常に同じ面を地球へ向けており、潮の満ち引きを引き起こしています。',
+          facts: { '直径': '3,474 km', '公転周期': '27.3 日', '母惑星': '地球' } }
+      ],
+      subtitle: '私たちの故郷',
+      desc: '液体の水と豊かな大気を持ち、生命が確認されている唯一の惑星です。表面の約7割が海で覆われ、適度な温度と磁場が生命を守っています。唯一の衛星として月を持ちます。',
+      facts: { '直径': '12,742 km', '公転周期': '365 日', '自転周期': '24 時間', '衛星': '1（月）' }
+    },
+    {
+      key: 'mars', name: '火星', en: 'Mars',
+      size: 2.0, distance: 74, speed: 0.53, spin: 0.018, tilt: 25.2, incl: 1.85,
+      colors: ['#c1502e', '#9c3b22', '#e0764d'], texture: 'rocky',
+      map: 'mars.jpg',
+      character: 'character_images/mars_char.png?v=2',
+      subtitle: '赤い惑星',
+      desc: '酸化鉄（さび）に覆われた表面が赤く見えることから「赤い惑星」と呼ばれます。太陽系最大の火山オリンポス山や巨大な峡谷を持ち、かつて水が流れた痕跡があるため生命探査の最有力候補です。',
+      facts: { '直径': '6,779 km', '公転周期': '687 日', '自転周期': '24.6 時間', '衛星': '2' }
+    },
+    {
+      key: 'jupiter', name: '木星', en: 'Jupiter',
+      size: 6.5, distance: 100, speed: 0.084, spin: 0.04, tilt: 3.1, incl: 1.3,
+      colors: ['#d8b48c', '#b5895f', '#e9d4b6'], texture: 'gas',
+      map: 'jupiter.jpg',
+      moons: [
+        { key: 'io', name: 'イオ', en: 'Io', size: 0.5, distance: 10, speed: 3.2,
+          colors: ['#e8d24a', '#cdae2e', '#f4e58a'], texture: 'rocky',
+          map: 'textures/nasa/io.webp',
+          subtitle: '太陽系で最も火山が活発',
+          desc: '木星の強い潮汐力で内部が熱せられ、太陽系で最も火山活動が活発な天体です。硫黄を噴き上げ、黄や赤の毒々しい表面をしています。',
+          facts: { '直径': '3,643 km', '公転周期': '1.8 日', '母惑星': '木星' } },
+        { key: 'europa', name: 'エウロパ', en: 'Europa', size: 0.45, distance: 13, speed: 2.4,
+          colors: ['#d9c4a0', '#bda983', '#efe3c8'], texture: 'ice',
+          tintMap: 'textures/nasa/europa.webp',
+          subtitle: '氷の下に海を持つ衛星',
+          desc: '表面を覆う氷の下に液体の海があると考えられ、地球外生命の有力な候補地として探査が計画されています。',
+          facts: { '直径': '3,122 km', '公転周期': '3.6 日', '母惑星': '木星' } },
+        { key: 'ganymede', name: 'ガニメデ', en: 'Ganymede', size: 0.75, distance: 16.5, speed: 1.7,
+          colors: ['#9a8c7a', '#7d7064', '#bcae9c'], texture: 'rocky',
+          tintMap: 'textures/nasa/ganymede.webp',
+          subtitle: '太陽系最大の衛星',
+          desc: '太陽系で最も大きな衛星で、惑星の水星よりも大きいほどです。衛星では唯一、自前の磁場を持っています。',
+          facts: { '直径': '5,268 km', '公転周期': '7.2 日', '母惑星': '木星' } },
+        { key: 'callisto', name: 'カリスト', en: 'Callisto', size: 0.7, distance: 20, speed: 1.2,
+          colors: ['#6b5d52', '#52473f', '#8a7a6c'], texture: 'rocky',
+          tintMap: 'textures/nasa/callisto.webp',
+          subtitle: 'クレーターだらけの古い衛星',
+          desc: '太陽系で最もクレーターに覆われた天体のひとつで、約40億年前の非常に古い表面をほぼそのまま保っています。',
+          facts: { '直径': '4,821 km', '公転周期': '16.7 日', '母惑星': '木星' } }
+      ],
+      subtitle: '太陽系最大の惑星',
+      desc: '太陽系で最も大きなガス惑星で、地球が1,300個以上入る巨大さです。表面の縞模様は高速のジェット気流で、「大赤斑」と呼ばれる地球数個分の巨大な嵐が何百年も続いています。',
+      facts: { '直径': '139,820 km', '公転周期': '11.9 年', '自転周期': '9.9 時間', '衛星': '95+' }
+    },
+    {
+      key: 'saturn', name: '土星', en: 'Saturn',
+      size: 5.5, distance: 138, speed: 0.034, spin: 0.038, tilt: 26.7, incl: 2.49,
+      colors: ['#e7d2a0', '#c9ad74', '#f1e3c0'], texture: 'gas', ring: true,
+      map: 'saturn.jpg',
+      ringTex: 'saturn_ring.png',
+      moons: [
+        { key: 'titan', name: 'タイタン', en: 'Titan', size: 0.75, distance: 15.5, speed: 1.6,
+          colors: ['#d8973c', '#b97a26', '#eab866'], texture: 'cloudy',
+          subtitle: '濃い大気を持つ衛星',
+          desc: '太陽系で2番目に大きな衛星。地球以外で唯一、濃い大気と地表の液体（メタンの川や湖）を持つ、極めて特異な天体です。',
+          facts: { '直径': '5,150 km', '公転周期': '16 日', '母惑星': '土星' } }
+      ],
+      subtitle: '美しい環を持つ惑星',
+      desc: '無数の氷や岩の粒からなる壮大な環で知られるガス惑星です。環の幅は約27万kmにも及びますが、厚さは数十メートルしかありません。密度が非常に低く、水に浮くほど軽い惑星です。',
+      facts: { '直径': '116,460 km', '公転周期': '29.5 年', '自転周期': '10.7 時間', '衛星': '146+' }
+    },
+    {
+      key: 'uranus', name: '天王星', en: 'Uranus',
+      size: 4.0, distance: 176, speed: 0.012, spin: 0.03, tilt: 97.8, incl: 0.77,
+      colors: ['#9fe3e3', '#7ec5c9', '#c4f0f0'], texture: 'ice', ring: true,
+      map: 'uranus.jpg',
+      moons: [
+        { key: 'miranda', name: 'ミランダ', en: 'Miranda', size: 0.4, distance: 11, speed: 2.0,
+          colors: ['#b8bcc0', '#969aa0', '#d6dade'], texture: 'ice',
+          subtitle: '継ぎはぎ模様の小衛星',
+          desc: '高さ20kmにも達する巨大な崖や、入り組んだ奇妙な地形を持つ小さな衛星。まるで一度砕けて再集合したかのような「継ぎはぎ」の表面で知られます。',
+          facts: { '直径': '472 km', '公転周期': '1.4 日', '母惑星': '天王星' } }
+      ],
+      subtitle: '横倒しで回る氷の惑星',
+      desc: 'メタンを含む大気が青緑色に見える氷の巨大惑星です。自転軸が約98度傾いており、ほぼ横倒しの状態で公転する非常に珍しい惑星です。そのため極端な季節変化が起こります。',
+      facts: { '直径': '50,724 km', '公転周期': '84 年', '自転周期': '17.2 時間', '衛星': '28' }
+    },
+    {
+      key: 'neptune', name: '海王星', en: 'Neptune',
+      size: 3.9, distance: 210, speed: 0.006, spin: 0.032, tilt: 28.3, incl: 1.77,
+      colors: ['#3b6fd6', '#2b52a8', '#6f9bf0'], texture: 'ice',
+      map: 'neptune.jpg',
+      moons: [
+        { key: 'triton', name: 'トリトン', en: 'Triton', size: 0.55, distance: 9, speed: 1.8,
+          colors: ['#d6c0b0', '#b89a88', '#efe0d2'], texture: 'ice',
+          subtitle: '逆向きに公転する衛星',
+          desc: '母惑星の自転と逆向きに公転する珍しい衛星で、窒素の間欠泉を噴き上げています。元は太陽系外縁の天体が捕らえられたものと考えられています。',
+          facts: { '直径': '2,707 km', '公転周期': '5.9 日', '母惑星': '海王星' } }
+      ],
+      subtitle: '太陽系最果ての惑星',
+      desc: '太陽から最も遠い惑星で、深い青色が特徴です。太陽系で最も強い風が吹き、その速度は秒速600mにも達します。望遠鏡ではなく数学的な計算によって存在が予言され、発見された惑星です。',
+      facts: { '直径': '49,244 km', '公転周期': '165 年', '自転周期': '16.1 時間', '衛星': '16' }
+    },
+    {
+      key: 'pluto', name: '冥王星', en: 'Pluto', dwarf: true,
+      size: 1.0, distance: 248, speed: 0.004, spin: 0.012, tilt: 122.5, incl: 17.2,
+      colors: ['#caa886', '#a8835f', '#e3cbb0'], texture: 'ice',
+      map: 'textures/nasa/pluto.jpg',
+      moons: [
+        { key: 'charon', name: 'カロン', en: 'Charon', size: 0.5, distance: 3.2, speed: 1.4,
+          colors: ['#b0a99f', '#8d877d', '#d0cac2'], texture: 'ice',
+          map: 'textures/nasa/charon.jpg',
+          subtitle: '冥王星と対を成す巨大な衛星',
+          desc: '直径が冥王星の半分以上もある大きな衛星です。互いに共通の重心のまわりを回り、常に同じ面を向け合う「二重天体」とも呼ばれる珍しい関係にあります。',
+          facts: { '直径': '1,212 km', '公転周期': '6.4 日', '母惑星': '冥王星' } }
+      ],
+      subtitle: '太陽系外縁の準惑星',
+      desc: 'かつては9番目の惑星とされましたが、2006年に準惑星へ分類変更されました。表面には窒素やメタンの氷が広がり、ハート形の平原「トンボー領域」が探査機ニューホライズンズによって発見されました。',
+      facts: { '直径': '2,377 km', '公転周期': '248 年', '自転周期': '6.4 日', '衛星': '5' }
+    }
+  ];
+
+  // ----------------------------------------------------------------------
+  // Canvas で惑星テクスチャを生成（外部画像に依存しない）
+  // ----------------------------------------------------------------------
+  function makePlanetTexture(planet, size = 512) {
+    const c = document.createElement('canvas');
+    c.width = size; c.height = size / 2;
+    const ctx = c.getContext('2d');
+    const [a, b, hi] = planet.colors;
+    const w = c.width, h = c.height;
+
+    // ベースの縦グラデーション
+    const g = ctx.createLinearGradient(0, 0, 0, h);
+    g.addColorStop(0, b); g.addColorStop(0.5, a); g.addColorStop(1, b);
+    ctx.fillStyle = g; ctx.fillRect(0, 0, w, h);
+
+    const rand = mulberry(planet.key.length * 99 + planet.distance);
+
+    if (planet.texture === 'gas' || planet.texture === 'cloudy') {
+      // 横縞模様
+      for (let i = 0; i < 26; i++) {
+        const y = rand() * h;
+        const bh = 4 + rand() * 16;
+        ctx.fillStyle = shade([a, b, hi][Math.floor(rand() * 3)], (rand() - 0.5) * 40);
+        ctx.globalAlpha = 0.55;
+        ctx.fillRect(0, y, w, bh);
+      }
+      ctx.globalAlpha = 1;
+    } else if (planet.texture === 'earth') {
+      // 大陸風のブロブ
+      ctx.fillStyle = planet.colors[1];
+      for (let i = 0; i < 28; i++) {
+        ctx.globalAlpha = 0.85;
+        blob(ctx, rand() * w, rand() * h, 12 + rand() * 50, rand);
+      }
+      ctx.globalAlpha = 1;
+    } else if (planet.texture === 'ice') {
+      for (let i = 0; i < 14; i++) {
+        const y = rand() * h;
+        ctx.fillStyle = shade(hi, (rand() - 0.5) * 24);
+        ctx.globalAlpha = 0.35;
+        ctx.fillRect(0, y, w, 3 + rand() * 8);
+      }
+      ctx.globalAlpha = 1;
+    } else {
+      // 岩石：クレーターと斑点
+      for (let i = 0; i < 260; i++) {
+        const x = rand() * w, y = rand() * h, r = rand() * 6 + 1;
+        ctx.fillStyle = shade(a, (rand() - 0.5) * 60);
+        ctx.globalAlpha = 0.5;
+        ctx.beginPath(); ctx.arc(x, y, r, 0, Math.PI * 2); ctx.fill();
+      }
+      ctx.globalAlpha = 1;
+    }
+    return c;
+  }
+
+  function blob(ctx, x, y, r, rand) {
+    ctx.beginPath();
+    const pts = 8;
+    for (let i = 0; i <= pts; i++) {
+      const ang = (i / pts) * Math.PI * 2;
+      const rr = r * (0.6 + rand() * 0.7);
+      const px = x + Math.cos(ang) * rr, py = y + Math.sin(ang) * rr * 0.7;
+      i === 0 ? ctx.moveTo(px, py) : ctx.lineTo(px, py);
+    }
+    ctx.closePath(); ctx.fill();
+  }
+
+  function shade(hex, amt) {
+    const n = parseInt(hex.slice(1), 16);
+    let r = (n >> 16) + amt, g = ((n >> 8) & 255) + amt, b = (n & 255) + amt;
+    r = Math.max(0, Math.min(255, r)); g = Math.max(0, Math.min(255, g)); b = Math.max(0, Math.min(255, b));
+    return `rgb(${r|0},${g|0},${b|0})`;
+  }
+  function mulberry(seed) {
+    return function () {
+      seed |= 0; seed = (seed + 0x6D2B79F5) | 0;
+      let t = Math.imul(seed ^ (seed >>> 15), 1 | seed);
+      t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+      return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+    };
+  }
+
+  // ----------------------------------------------------------------------
+  // Three.js シーン構築
+  // ----------------------------------------------------------------------
+  const app = document.getElementById('app');
+  const scene = new THREE.Scene();
+
+  const camera = new THREE.PerspectiveCamera(55, innerWidth / innerHeight, 0.1, 5000);
+  camera.position.set(0, 110, 260);
+
+  const renderer = new THREE.WebGLRenderer({ antialias: true });
+  renderer.setSize(innerWidth, innerHeight);
+  renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+  app.appendChild(renderer.domElement);
+
+  const controls = new OrbitControls(camera, renderer.domElement);
+  controls.enableDamping = true;
+  controls.dampingFactor = 0.06;
+  controls.minDistance = 30;
+  controls.maxDistance = 900;
+
+  // テクスチャ読み込み（用意された equirectangular マップ）
+  const TEX_DIR = 'textures/ssc/';   // Solar System Scope（CC BY 4.0）
+  const texLoader = new THREE.TextureLoader();
+  function loadTex(file, { srgb = true } = {}) {
+    // スラッシュを含む場合はそのままのパス、含まない場合は既定フォルダ配下とみなす
+    const path = file.includes('/') ? file : TEX_DIR + file;
+    const t = texLoader.load(path);
+    if (srgb) t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = renderer.capabilities.getMaxAnisotropy();
+    return t;
+  }
+
+  // 天体の表面マテリアル：用意されたテクスチャがあれば使い、無ければ手描きにフォールバック
+  //   map     … フルカラーのテクスチャをそのまま使う
+  //   tintMap … モノクロのテクスチャを「模様」として使い、天体の色（colors[0]）で着色する
+  function bodyMaterial(data, roughness) {
+    const opts = { roughness, metalness: 0.04 };
+    let map;
+    if (data.tintMap) {
+      // モノクロの模様 × 天体色 → 色はそのままに模様だけ反映
+      map = loadTex(data.tintMap);
+      opts.color = new THREE.Color(data.colors ? data.colors[0] : 0xffffff);
+    } else if (data.map) {
+      map = loadTex(data.map);
+    } else {
+      map = new THREE.CanvasTexture(makePlanetTexture(data, 256));
+      map.colorSpace = THREE.SRGBColorSpace;
+    }
+    opts.map = map;
+    // ノーマルマップ（地球など）— 凹凸の陰影を付ける。色ではないので非sRGBで読み込む。
+    if (data.normalMap) {
+      opts.normalMap = loadTex(data.normalMap, { srgb: false });
+      opts.normalScale = new THREE.Vector2(0.8, 0.8);
+    }
+    data._tex = map;   // ポップアップのプレビュー描画に流用
+    return new THREE.MeshStandardMaterial(opts);
+  }
+
+  // 星空の背景
+  function makeStars() {
+    const geo = new THREE.BufferGeometry();
+    const n = 2500, pos = new Float32Array(n * 3);
+    const rand = mulberry(7);
+    for (let i = 0; i < n; i++) {
+      const r = 800 + rand() * 1500;
+      const theta = rand() * Math.PI * 2;
+      const phi = Math.acos(2 * rand() - 1);
+      pos[i*3]   = r * Math.sin(phi) * Math.cos(theta);
+      pos[i*3+1] = r * Math.sin(phi) * Math.sin(theta);
+      pos[i*3+2] = r * Math.cos(phi);
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    const mat = new THREE.PointsMaterial({ color: 0xffffff, size: 1.6, sizeAttenuation: true });
+    return new THREE.Points(geo, mat);
+  }
+  scene.add(makeStars());
+
+  // 太陽
+  const sunTex = loadTex('sun.jpg');
+  const sun = new THREE.Mesh(
+    new THREE.SphereGeometry(12, 48, 48),
+    new THREE.MeshBasicMaterial({ map: sunTex })
+  );
+  // 太陽もクリックで詳細を表示できるようにデータを持たせる
+  const SUN = {
+    key: 'sun', name: '太陽', en: 'Sun', star: true,
+    subtitle: '太陽系の中心に輝く恒星',
+    desc: '太陽系の質量の99.8%以上を占める、自ら輝く恒星です。中心部では水素がヘリウムに変わる核融合が起こり、莫大なエネルギーを生み出しています。その重力がすべての惑星をつなぎとめ、光と熱が地球の生命を支えています。',
+    facts: { '直径': '1,392,000 km', '表面温度': '約 5,500 ℃', '中心温度': '約 1,500 万℃', '分類': 'G型主系列星' },
+    _mesh: sun, _tex: sunTex
+  };
+  sun.userData.planet = SUN;
+  scene.add(sun);
+
+  scene.add(new THREE.AmbientLight(0xffffff, 0.18));
+  const sunLight = new THREE.PointLight(0xffffff, 2.6, 0, 0.0);
+  scene.add(sunLight);
+
+  // 惑星と軌道を生成
+  const orbitLines = [];
+  const labels = [];
+  const planetMeshes = [];
+  const selectables = [sun]; // クリック・ホバー対象（太陽＋惑星＋衛星）
+  const moonGroups = [];    // 惑星ごとの衛星のまとまり
+  const moonLabels = [];    // 衛星名ラベル（位置追従用）
+  const cloudLayers = [];   // 雲・大気レイヤー（オンオフ用）
+
+  PLANETS.forEach((p) => {
+    // 公転面の傾き（黄道に対する軌道傾斜角）を表すグループ。
+    // 軌道線・惑星のピボットをまとめて傾けることで、軌道ごと斜めになる。
+    // node（昇交点の向き）を惑星ごとに変えて、傾く方向もばらつかせる。
+    const orbitPlane = new THREE.Object3D();
+    orbitPlane.rotation.order = 'YXZ';
+    orbitPlane.rotation.y = mulberry(Math.round(p.distance) * 7 + 1)() * Math.PI * 2;
+    orbitPlane.rotation.x = THREE.MathUtils.degToRad(p.incl || 0);
+    scene.add(orbitPlane);
+
+    // 公転の中心となるピボット
+    const pivot = new THREE.Object3D();
+    orbitPlane.add(pivot);
+
+    // 地軸の傾きを表すグループ（公転とは独立して傾きを保つ）
+    const tiltGroup = new THREE.Object3D();
+    tiltGroup.position.x = p.distance;
+    tiltGroup.rotation.z = THREE.MathUtils.degToRad(p.tilt || 0);
+    pivot.add(tiltGroup);
+
+    const mesh = new THREE.Mesh(
+      new THREE.SphereGeometry(p.size, 48, 48),
+      bodyMaterial(p, 0.85)
+    );
+    mesh.userData.planet = p;
+    tiltGroup.add(mesh);          // 傾いた軸のまわりで自転する
+    planetMeshes.push(mesh);
+    selectables.push(mesh);
+
+    // 雲・大気レイヤー（金星＝不透明な大気 / 地球＝半透明の雲）。オンオフ可能。
+    if (p.cloud) {
+      const cl = p.cloud;
+      let cmat;
+      if (cl.opaque) {
+        // 金星：分厚い大気が地表を覆い隠す
+        cmat = new THREE.MeshStandardMaterial({ map: loadTex(cl.map), roughness: 1, metalness: 0 });
+      } else {
+        // 地球：白い雲を半透明に重ねる（雲テクスチャの明度をそのまま不透明度に使う）
+        cmat = new THREE.MeshStandardMaterial({
+          color: 0xffffff, alphaMap: loadTex(cl.map, { srgb: false }),
+          transparent: true, depthWrite: false, opacity: 0.9, roughness: 1
+        });
+      }
+      const cloud = new THREE.Mesh(new THREE.SphereGeometry(p.size * (cl.scale || 1.02), 48, 48), cmat);
+      mesh.add(cloud);            // 惑星と一緒に自転・傾斜する
+      cloudLayers.push(cloud);
+      p._cloud = cloud;
+    }
+
+    // 環（土星・天王星）— 惑星の赤道面に沿う。
+    // 天王星は地軸が約98°傾いているため、環はほぼ縦向きに見える。
+    if (p.ring) {
+      const inner = p.size * (p.key === 'saturn' ? 1.2 : 1.78);
+      const outer = p.size * (p.key === 'saturn' ? 2.3 : 1.98);
+      const rgeo = new THREE.RingGeometry(inner, outer, 160);
+      // UV を半径方向に貼り直す（リングのテクスチャ＝内→外のグラデーション帯を正しく巻く）
+      const rpos = rgeo.attributes.position, ruv = rgeo.attributes.uv, rv = new THREE.Vector3();
+      for (let i = 0; i < rpos.count; i++) {
+        rv.fromBufferAttribute(rpos, i);
+        ruv.setXY(i, (rv.length() - inner) / (outer - inner), 0.5);
+      }
+      const ringMat = p.ringTex
+        ? new THREE.MeshBasicMaterial({ map: loadTex(p.ringTex), side: THREE.DoubleSide, transparent: true })
+        : new THREE.MeshBasicMaterial({ color: 0x8fc7cf, side: THREE.DoubleSide, transparent: true, opacity: 0.38 });
+      const ring = new THREE.Mesh(rgeo, ringMat);
+      ring.rotation.x = Math.PI / 2;   // 赤道面に正確に合わせる
+      tiltGroup.add(ring);             // 傾きはグループ側が担う
+    }
+
+    // 衛星（普段は非表示。親惑星にフォーカスしたときだけ表示してごちゃつきを防ぐ）
+    const group = { planet: p, meshes: [], orbits: [], labels: [] };
+    if (p.moons) {
+      p.moons.forEach((m) => {
+        m.isMoon = true;
+        m.parent = p;
+
+        // 衛星の公転ピボット（惑星の赤道面 = tiltGroup 内に置くので地軸の傾きを共有する）
+        const mPivot = new THREE.Object3D();
+        mPivot.rotation.y = mulberry(m.key.length * 13 + m.distance)() * Math.PI * 2;
+        tiltGroup.add(mPivot);
+
+        const mmesh = new THREE.Mesh(
+          new THREE.SphereGeometry(m.size, 32, 32),
+          bodyMaterial(m, 0.95)
+        );
+        mmesh.position.x = m.distance;
+        // 潮汐ロック：常に同じ面（表側）を母惑星へ向ける。
+        // テクスチャの中心（表側）は球の +X 側に来るが、それは母惑星と反対を向くため
+        // 180°回して表側を母惑星側へ向ける。
+        mmesh.rotation.y = Math.PI;
+        mmesh.userData.planet = m;
+        mPivot.add(mmesh);
+        selectables.push(mmesh);
+
+        // 衛星の軌道線
+        const og = new THREE.BufferGeometry();
+        const mpts = [];
+        for (let i = 0; i <= 80; i++) {
+          const a = (i / 80) * Math.PI * 2;
+          mpts.push(Math.cos(a) * m.distance, 0, Math.sin(a) * m.distance);
+        }
+        og.setAttribute('position', new THREE.Float32BufferAttribute(mpts, 3));
+        const oline = new THREE.Line(og, new THREE.LineBasicMaterial({ color: 0x70839f, transparent: true, opacity: 0.45 }));
+        tiltGroup.add(oline);
+
+        // 衛星名ラベル（惑星より小さめ）
+        const mlabel = makeLabel(m.name, { font: 22, scale: [9, 2.25], color: '#dfe7f2' });
+        mlabel.userData.mesh = mmesh;
+        scene.add(mlabel);
+        moonLabels.push(mlabel);
+
+        m._pivot = mPivot;
+        m._mesh = mmesh;
+
+        group.meshes.push(mmesh);
+        group.orbits.push(oline);
+        group.labels.push(mlabel);
+      });
+    }
+    moonGroups.push(group);
+
+    // 軌道線
+    const orbitGeo = new THREE.BufferGeometry();
+    const seg = 128, pts = [];
+    for (let i = 0; i <= seg; i++) {
+      const a = (i / seg) * Math.PI * 2;
+      pts.push(Math.cos(a) * p.distance, 0, Math.sin(a) * p.distance);
+    }
+    orbitGeo.setAttribute('position', new THREE.Float32BufferAttribute(pts, 3));
+    const orbit = new THREE.Line(orbitGeo, new THREE.LineBasicMaterial({ color: 0x3a567f, transparent: true, opacity: 0.5 }));
+    orbitPlane.add(orbit);   // 軌道線も公転面と一緒に傾く
+    orbitLines.push(orbit);
+
+    // 名前ラベル（スプライト）
+    const label = makeLabel(p.name);
+    label.userData.mesh = mesh;
+    scene.add(label);
+    labels.push(label);
+
+    // ランダムな初期角度
+    pivot.rotation.y = mulberry(p.distance)() * Math.PI * 2;
+    p._pivot = pivot;
+    p._mesh = mesh;
+  });
+
+  function makeLabel(text, opts = {}) {
+    const fs = opts.font || 30;
+    const color = opts.color || '#cfe0f5';
+    const c = document.createElement('canvas');
+    c.width = 256; c.height = 64;
+    const ctx = c.getContext('2d');
+    ctx.font = `600 ${fs}px "Hiragino Sans","Noto Sans JP",sans-serif`;
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.shadowColor = 'rgba(0,0,0,0.9)'; ctx.shadowBlur = 6;
+    ctx.fillText(text, 128, 32);
+    const tex = new THREE.CanvasTexture(c);
+    const sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthTest: false }));
+    const sc = opts.scale || [16, 4];
+    sp.scale.set(sc[0], sc[1], 1);
+    return sp;
+  }
+
+  // ----------------------------------------------------------------------
+  // インタラクション：クリック / ホバー
+  // ----------------------------------------------------------------------
+  const raycaster = new THREE.Raycaster();
+  const mouse = new THREE.Vector2();
+  const tooltip = document.getElementById('tooltip');
+  let hovered = null;
+
+  function setPointer(e) {
+    mouse.x = (e.clientX / innerWidth) * 2 - 1;
+    mouse.y = -(e.clientY / innerHeight) * 2 + 1;
+  }
+
+  renderer.domElement.addEventListener('pointermove', (e) => {
+    setPointer(e);
+    raycaster.setFromCamera(mouse, camera);
+    const hit = raycaster.intersectObjects(selectables, false).find(h => h.object.visible);
+    if (hit) {
+      hovered = hit.object;
+      renderer.domElement.style.cursor = 'pointer';
+      tooltip.textContent = hovered.userData.planet.name;
+      tooltip.style.left = e.clientX + 'px';
+      tooltip.style.top = e.clientY + 'px';
+      tooltip.style.opacity = '1';
+    } else {
+      hovered = null;
+      renderer.domElement.style.cursor = 'grab';
+      tooltip.style.opacity = '0';
+    }
+  });
+
+  // クリック（ドラッグと区別するため移動量をチェック）
+  let downPos = null;
+  renderer.domElement.addEventListener('pointerdown', (e) => { downPos = { x: e.clientX, y: e.clientY }; });
+  renderer.domElement.addEventListener('pointerup', (e) => {
+    if (!downPos) return;
+    const moved = Math.hypot(e.clientX - downPos.x, e.clientY - downPos.y);
+    downPos = null;
+    if (moved > 6) return; // ドラッグなので無視
+    setPointer(e);
+    raycaster.setFromCamera(mouse, camera);
+    const hit = raycaster.intersectObjects(selectables, false).find(h => h.object.visible);
+    if (hit) openPopup(hit.object.userData.planet);
+  });
+
+  // ----------------------------------------------------------------------
+  // ポップアップ
+  // ----------------------------------------------------------------------
+  const popup = document.getElementById('popup');
+  const popupCanvas = popup.querySelector('canvas.planet-img');
+  const popupChar = popup.querySelector('img.char-img');
+  const popupPreview = popup.querySelector('.preview');
+  // キャラクター画像が無い（git管理外）場合は枠を畳んで通常表示に戻す
+  popupChar.onerror = () => { popupChar.removeAttribute('src'); popupPreview.classList.remove('has-character'); };
+
+  function openPopup(p) {
+    popup.querySelector('h2').textContent = `${p.name}（${p.en}）`;
+    popup.querySelector('.subtitle').textContent = p.subtitle;
+    popup.querySelector('p').textContent = p.desc;
+    popup.querySelector('.badge').textContent = p.isMoon
+      ? `MOON · ${p.parent.name}の衛星`
+      : (p.star ? 'STAR' : (p.dwarf ? 'DWARF PLANET' : 'PLANET'));
+
+    const facts = popup.querySelector('.facts');
+    facts.innerHTML = '';
+    for (const [k, v] of Object.entries(p.facts)) {
+      const d = document.createElement('div');
+      d.innerHTML = `<span class="label">${k}</span><span class="value">${v}</span>`;
+      facts.appendChild(d);
+    }
+
+    // 惑星の画像をその場で描画（球体風シェーディング）
+    drawPlanetPreview(popupCanvas, p);
+
+    // イメージキャラクター画像（用意されている惑星のみ）
+    if (p.character) {
+      popupChar.src = p.character;
+      popupChar.alt = `${p.name}のイメージキャラクター`;
+      popupPreview.classList.add('has-character');
+    } else {
+      popupChar.removeAttribute('src');
+      popupChar.alt = '';
+      popupPreview.classList.remove('has-character');
+    }
+
+    // キャラクター紹介文（characters.js にまとめてある。用意されている天体のみ表示）
+    const charDescBox = popup.querySelector('.char-desc');
+    const charDesc = CHARACTER_DESCRIPTIONS[p.key];
+    if (charDesc) {
+      popup.querySelector('.cd-text').textContent = charDesc;
+      charDescBox.classList.add('show');
+    } else {
+      charDescBox.classList.remove('show');
+    }
+
+    popup.classList.add('show');
+
+    // 衛星の表示切り替え：惑星ならその惑星、衛星なら親惑星をアクティブにする
+    activePlanet = p.isMoon ? p.parent : p;
+    updateMoonVisibility();
+    focusPlanet(p.isMoon ? p.parent : p);
+  }
+
+  function drawPlanetPreview(canvas, p) {
+    const ctx = canvas.getContext('2d');
+    const W = canvas.width, H = canvas.height, R = W * 0.45, cx = W/2, cy = H/2;
+    ctx.clearRect(0, 0, W, H);
+    ctx.save();
+    ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI*2); ctx.clip();
+    // 下地：用意されたテクスチャ画像があれば中央を正方形に切り出して使い、無ければ手描き
+    const img = p._tex && p._tex.image;
+    if (img && img.complete && img.width) {
+      const s = Math.min(img.width, img.height);
+      ctx.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, cx - R, cy - R, R*2, R*2);
+      // モノクロの模様テクスチャは天体色で着色（3D表示と合わせる）
+      if (p.tintMap && p.colors) {
+        ctx.save();
+        ctx.globalCompositeOperation = 'multiply';
+        ctx.fillStyle = p.colors[0];
+        ctx.fillRect(cx - R, cy - R, R*2, R*2);
+        ctx.restore();
+      }
+    } else {
+      ctx.drawImage(makePlanetTexture(p, 600), cx - R, cy - R, R*2, R*2);
+    }
+    // 球体の陰影
+    const sh = ctx.createRadialGradient(cx - R*0.35, cy - R*0.35, R*0.2, cx, cy, R*1.15);
+    sh.addColorStop(0, 'rgba(255,255,255,0.25)');
+    sh.addColorStop(0.5, 'rgba(0,0,0,0)');
+    sh.addColorStop(1, 'rgba(0,0,0,0.75)');
+    ctx.fillStyle = sh; ctx.fillRect(cx-R, cy-R, R*2, R*2);
+    ctx.restore();
+    // 環 — 地軸の傾きに合わせて向きを変える（天王星はほぼ縦向き）
+    if (p.ring) {
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(THREE.MathUtils.degToRad(p.tilt || 0));  // 赤道面の傾き
+      ctx.scale(1, 0.32);                                  // 見込み角による圧縮
+      ctx.strokeStyle = p.key === 'saturn' ? 'rgba(216,199,154,0.85)' : 'rgba(159,212,216,0.6)';
+      ctx.lineWidth = R * (p.key === 'saturn' ? 0.2 : 0.06);
+      ctx.beginPath(); ctx.arc(0, 0, R * 1.5, 0, Math.PI*2); ctx.stroke();
+      ctx.restore();
+    }
+  }
+
+  popup.querySelector('.close').addEventListener('click', () => popup.classList.remove('show'));
+
+  // 選択した惑星にカメラを寄せる
+  let focusTarget = null;
+  function focusPlanet(p) { focusTarget = p._mesh; }
+
+  // 衛星の表示制御：アクティブな惑星の衛星だけを見せる
+  let activePlanet = null;
+  function updateMoonVisibility() {
+    moonGroups.forEach((g) => {
+      const on = moonsEnabled && g.planet === activePlanet;
+      g.meshes.forEach(x => x.visible = on);
+      g.orbits.forEach(x => x.visible = on && showOrbits);
+      g.labels.forEach(x => x.visible = on && showLabels);
+    });
+  }
+
+  // ----------------------------------------------------------------------
+  // コントロールボタン
+  // ----------------------------------------------------------------------
+  let paused = false, showOrbits = true, showLabels = true, moonsEnabled = true, showClouds = true;
+  const btnPause = document.getElementById('btn-pause');
+  const btnOrbits = document.getElementById('btn-orbits');
+  const btnLabels = document.getElementById('btn-labels');
+  const btnMoons = document.getElementById('btn-moons');
+  const btnClouds = document.getElementById('btn-clouds');
+
+  btnPause.onclick = () => {
+    paused = !paused;
+    btnPause.textContent = paused ? '▶ 再生' : '⏸ 一時停止';
+    btnPause.classList.toggle('active', paused);
+  };
+  btnOrbits.onclick = () => {
+    showOrbits = !showOrbits;
+    orbitLines.forEach(o => o.visible = showOrbits);
+    btnOrbits.classList.toggle('active', showOrbits);
+    updateMoonVisibility();
+  };
+  btnLabels.onclick = () => {
+    showLabels = !showLabels;
+    labels.forEach(l => l.visible = showLabels);
+    btnLabels.classList.toggle('active', showLabels);
+    updateMoonVisibility();
+  };
+  btnMoons.onclick = () => {
+    moonsEnabled = !moonsEnabled;
+    btnMoons.classList.toggle('active', moonsEnabled);
+    updateMoonVisibility();
+  };
+  btnClouds.onclick = () => {
+    showClouds = !showClouds;
+    cloudLayers.forEach(c => c.visible = showClouds);
+    btnClouds.classList.toggle('active', showClouds);
+  };
+
+  // 初期状態では衛星は非表示（惑星をクリックすると現れる）
+  updateMoonVisibility();
+
+  document.addEventListener('keydown', (e) => { if (e.key === 'Escape') popup.classList.remove('show'); });
+
+  // ----------------------------------------------------------------------
+  // アニメーションループ
+  // ----------------------------------------------------------------------
+  const SPEED = 0.0016;
+  const tmp = new THREE.Vector3();
+
+  function animate() {
+    requestAnimationFrame(animate);
+
+    if (!paused) {
+      PLANETS.forEach((p) => {
+        p._pivot.rotation.y += p.speed * SPEED;
+        p._mesh.rotation.y += p.spin;
+        if (p.moons) p.moons.forEach(m => { m._pivot.rotation.y += m.speed * SPEED * 4; });
+      });
+      sun.rotation.y += 0.001;
+    }
+
+    // ラベルを惑星の上に追従
+    labels.forEach((l) => {
+      l.userData.mesh.getWorldPosition(tmp);
+      l.position.set(tmp.x, tmp.y + l.userData.mesh.userData.planet.size + 4, tmp.z);
+    });
+
+    // 衛星ラベルの追従（表示中のものだけ）
+    moonLabels.forEach((l) => {
+      if (!l.visible) return;
+      const m = l.userData.mesh.userData.planet;
+      l.userData.mesh.getWorldPosition(tmp);
+      l.position.set(tmp.x, tmp.y + m.size + 1.6, tmp.z);
+    });
+
+    // 惑星にフォーカス中はカメラのターゲットを滑らかに移動
+    if (focusTarget) {
+      focusTarget.getWorldPosition(tmp);
+      controls.target.lerp(tmp, 0.06);
+    } else {
+      controls.target.lerp(new THREE.Vector3(0,0,0), 0.04);
+    }
+
+    controls.update();
+    renderer.render(scene, camera);
+  }
+
+  // ダブルクリックでフォーカス解除（衛星も隠してビューをすっきりさせる）
+  renderer.domElement.addEventListener('dblclick', () => {
+    focusTarget = null;
+    activePlanet = null;
+    updateMoonVisibility();
+    popup.classList.remove('show');
+  });
+
+  window.addEventListener('resize', () => {
+    camera.aspect = innerWidth / innerHeight;
+    camera.updateProjectionMatrix();
+    renderer.setSize(innerWidth, innerHeight);
+  });
+
+  animate();
+
+  // ローディング解除
+  setTimeout(() => document.getElementById('loading').classList.add('hide'), 400);
+  </script>
+</body>
+</html>
