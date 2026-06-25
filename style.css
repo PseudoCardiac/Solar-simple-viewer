@@ -210,6 +210,14 @@ canvas { display: block; }
     /* visibility: hidden; */
 }
 
+#tachie {
+    mask-image: linear-gradient(to right, rgba(0, 0, 0, 1.0) 0%, rgba(0, 0, 0, 1.0) 60%, transparent 90%);
+}
+
+.hidden {
+    visibility: hidden;
+}
+
 .fixed {
     position: fixed;
 }

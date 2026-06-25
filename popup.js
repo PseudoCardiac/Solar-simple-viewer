@@ -146,7 +146,8 @@ const titleAnimRev = () => {
   } )
 }
 
-const popupOpen = () => {
+const popupOpen = ( data ) => {
+  setDecor( data );
   tachieAnim();
   nameRomajiAnim();
   nameKanjiAnim();
@@ -158,7 +159,8 @@ const popupOpen = () => {
   titleAnim();
 }
 
-const popupClose = () => {
+const popupClose = ( data ) => {
+  setDecor( data );
   tachieAnimRev();
   nameRomajiAnimRev();
   nameKanjiAnimRev();
@@ -170,26 +172,45 @@ const popupClose = () => {
   titleAnimRev();
 }
 
-// $wakusei.addEventListener( 'click', tachieAnim );
-// $wakusei.addEventListener( 'click', nameRomajiAnim );
-// $wakusei.addEventListener( 'click', nameKanjiAnim );
-// $wakusei.addEventListener( 'click', radiusAnim );
-// $wakusei.addEventListener( 'click', revolutionAnim );
-// $wakusei.addEventListener( 'click', rotationAnim );
-// $wakusei.addEventListener( 'click', moonAnim );
-// $wakusei.addEventListener( 'click', descriptionAnim );
-// $wakusei.addEventListener( 'click', titleAnim );
-$wakusei.addEventListener( 'click', () => {
-  $wakusei.classList.toggle( "activated" )
-} );
-$wakusei.addEventListener( 'click', () => {
-  if ( $wakusei.classList.contains( "activated" ) ) {
-    popupClose();
-  } else {
-    popupOpen()
-  }
-} );
+// $wakusei.addEventListener( 'click', () => {
+//   $wakusei.classList.toggle( "activated" )
+// } );
+// $wakusei.addEventListener( 'click', () => {
+//   if ( $wakusei.classList.contains( "activated" ) ) {
+//     popupClose();
+//   } else {
+//     popupOpen();
+//   }
+// } );
 
 // $wakusei.addEventListener( "click", function () {
 //   alert( "asdf" );
 // } )
+
+const DECOR = document.getElementById( "decor" );
+const ART = document.getElementById( "tachie" );
+const NAME_ROMAJI = document.getElementById( "name-romaji" );
+const NAME_KANJI = document.getElementById( "name-kanji" );
+const TITLE = document.getElementById( "title" );
+const DESC = document.getElementById( "description" );
+const RADIUS = document.getElementById( "radius-text" );
+const REVOLUTION = document.getElementById( "revolution-text" );
+const ROTATION = document.getElementById( "rotation-text" );
+const MOON = document.getElementById( "moon-text" );
+
+const setDecor = ( data ) => {
+  ART.src = data.artwork;
+  ART.style.top = `${ -(data.top) }px`;
+  ART.style.left = `calc( 30vw - ${ data.left }px )`
+  // ART.style.maskImage = `linear-gradient(to right, rgba(0, 0, 0, 1.0) ${ ART.style.left }, rgba(0, 0, 0, 1.0) calc( ${ ART.style.left } + 20vw ), transparent calc( ${ ART.style.left } + 50vw ));`
+  NAME_ROMAJI.textContent = data.en;
+  NAME_KANJI.textContent = data.name
+  TITLE.textContent = data.subtitle;
+  DESC.textContent = data.desc;
+  RADIUS.textContent = data.facts[ "直径" ];
+  REVOLUTION.textContent = data.facts[ "公転周期" ];
+  ROTATION.textContent = data.facts[ "自転周期" ];
+  MOON.textContent = data.facts[ "衛星" ];
+}
+
+export { popupOpen, popupClose };
