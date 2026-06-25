@@ -204,8 +204,10 @@ canvas { display: block; }
     white-space: nowrap;
     z-index: 8;
 }
-body {
-    font-family: "Noto Sans JP"
+
+#decor {
+    pointer-events: none;
+    /* visibility: hidden; */
 }
 
 .fixed {

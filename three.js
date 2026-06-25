@@ -572,104 +572,104 @@ renderer.domElement.addEventListener('pointerup', (e) => {
 // ----------------------------------------------------------------------
 // ポップアップ
 // ----------------------------------------------------------------------
-const popup = document.getElementById('popup');
-const popupCanvas = popup.querySelector('canvas.planet-img');
-const popupChar = popup.querySelector('img.char-img');
-const popupPreview = popup.querySelector('.preview');
-// キャラクター画像が無い（git管理外）場合は枠を畳んで通常表示に戻す
-popupChar.onerror = () => { popupChar.removeAttribute('src'); popupPreview.classList.remove('has-character'); };
+// const popup = document.getElementById('popup');
+// const popupCanvas = popup.querySelector('canvas.planet-img');
+// const popupChar = popup.querySelector('img.char-img');
+// const popupPreview = popup.querySelector('.preview');
+// // キャラクター画像が無い（git管理外）場合は枠を畳んで通常表示に戻す
+// popupChar.onerror = () => { popupChar.removeAttribute('src'); popupPreview.classList.remove('has-character'); };
 
-function openPopup(p) {
-  popup.querySelector('h2').textContent = `${p.name}（${p.en}）`;
-  popup.querySelector('.subtitle').textContent = p.subtitle;
-  popup.querySelector('p').textContent = p.desc;
-  popup.querySelector('.badge').textContent = p.isMoon
-    ? `MOON · ${p.parent.name}の衛星`
-    : (p.star ? 'STAR' : (p.dwarf ? 'DWARF PLANET' : 'PLANET'));
+// function openPopup(p) {
+//   popup.querySelector('h2').textContent = `${p.name}（${p.en}）`;
+//   popup.querySelector('.subtitle').textContent = p.subtitle;
+//   popup.querySelector('p').textContent = p.desc;
+//   popup.querySelector('.badge').textContent = p.isMoon
+//     ? `MOON · ${p.parent.name}の衛星`
+//     : (p.star ? 'STAR' : (p.dwarf ? 'DWARF PLANET' : 'PLANET'));
 
-  const facts = popup.querySelector('.facts');
-  facts.innerHTML = '';
-  for (const [k, v] of Object.entries(p.facts)) {
-    const d = document.createElement('div');
-    d.innerHTML = `<span class="label">${k}</span><span class="value">${v}</span>`;
-    facts.appendChild(d);
-  }
+//   const facts = popup.querySelector('.facts');
+//   facts.innerHTML = '';
+//   for (const [k, v] of Object.entries(p.facts)) {
+//     const d = document.createElement('div');
+//     d.innerHTML = `<span class="label">${k}</span><span class="value">${v}</span>`;
+//     facts.appendChild(d);
+//   }
 
-  // 惑星の画像をその場で描画（球体風シェーディング）
-  drawPlanetPreview(popupCanvas, p);
+//   // 惑星の画像をその場で描画（球体風シェーディング）
+//   drawPlanetPreview(popupCanvas, p);
 
-  // イメージキャラクター画像（用意されている惑星のみ）
-  if (p.character) {
-    popupChar.src = p.character;
-    popupChar.alt = `${p.name}のイメージキャラクター`;
-    popupPreview.classList.add('has-character');
-  } else {
-    popupChar.removeAttribute('src');
-    popupChar.alt = '';
-    popupPreview.classList.remove('has-character');
-  }
+//   // イメージキャラクター画像（用意されている惑星のみ）
+//   if (p.character) {
+//     popupChar.src = p.character;
+//     popupChar.alt = `${p.name}のイメージキャラクター`;
+//     popupPreview.classList.add('has-character');
+//   } else {
+//     popupChar.removeAttribute('src');
+//     popupChar.alt = '';
+//     popupPreview.classList.remove('has-character');
+//   }
 
-  // キャラクター紹介文（characters.js にまとめてある。用意されている天体のみ表示）
-  const charDescBox = popup.querySelector('.char-desc');
-  const charDesc = CHARACTER_DESCRIPTIONS[p.key];
-  if (charDesc) {
-    popup.querySelector('.cd-text').textContent = charDesc;
-    charDescBox.classList.add('show');
-  } else {
-    charDescBox.classList.remove('show');
-  }
+//   // キャラクター紹介文（characters.js にまとめてある。用意されている天体のみ表示）
+//   const charDescBox = popup.querySelector('.char-desc');
+//   const charDesc = CHARACTER_DESCRIPTIONS[p.key];
+//   if (charDesc) {
+//     popup.querySelector('.cd-text').textContent = charDesc;
+//     charDescBox.classList.add('show');
+//   } else {
+//     charDescBox.classList.remove('show');
+//   }
 
-  popup.classList.add('show');
+//   popup.classList.add('show');
 
-  // 衛星の表示切り替え：惑星ならその惑星、衛星なら親惑星をアクティブにする
-  activePlanet = p.isMoon ? p.parent : p;
-  updateMoonVisibility();
-  focusPlanet(p.isMoon ? p.parent : p);
-}
+//   // 衛星の表示切り替え：惑星ならその惑星、衛星なら親惑星をアクティブにする
+//   activePlanet = p.isMoon ? p.parent : p;
+//   updateMoonVisibility();
+//   focusPlanet(p.isMoon ? p.parent : p);
+// }
 
-function drawPlanetPreview(canvas, p) {
-  const ctx = canvas.getContext('2d');
-  const W = canvas.width, H = canvas.height, R = W * 0.45, cx = W/2, cy = H/2;
-  ctx.clearRect(0, 0, W, H);
-  ctx.save();
-  ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI*2); ctx.clip();
-  // 下地：用意されたテクスチャ画像があれば中央を正方形に切り出して使い、無ければ手描き
-  const img = p._tex && p._tex.image;
-  if (img && img.complete && img.width) {
-    const s = Math.min(img.width, img.height);
-    ctx.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, cx - R, cy - R, R*2, R*2);
-    // モノクロの模様テクスチャは天体色で着色（3D表示と合わせる）
-    if (p.tintMap && p.colors) {
-      ctx.save();
-      ctx.globalCompositeOperation = 'multiply';
-      ctx.fillStyle = p.colors[0];
-      ctx.fillRect(cx - R, cy - R, R*2, R*2);
-      ctx.restore();
-    }
-  } else {
-    ctx.drawImage(makePlanetTexture(p, 600), cx - R, cy - R, R*2, R*2);
-  }
-  // 球体の陰影
-  const sh = ctx.createRadialGradient(cx - R*0.35, cy - R*0.35, R*0.2, cx, cy, R*1.15);
-  sh.addColorStop(0, 'rgba(255,255,255,0.25)');
-  sh.addColorStop(0.5, 'rgba(0,0,0,0)');
-  sh.addColorStop(1, 'rgba(0,0,0,0.75)');
-  ctx.fillStyle = sh; ctx.fillRect(cx-R, cy-R, R*2, R*2);
-  ctx.restore();
-  // 環 — 地軸の傾きに合わせて向きを変える（天王星はほぼ縦向き）
-  if (p.ring) {
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate(THREE.MathUtils.degToRad(p.tilt || 0));  // 赤道面の傾き
-    ctx.scale(1, 0.32);                                  // 見込み角による圧縮
-    ctx.strokeStyle = p.key === 'saturn' ? 'rgba(216,199,154,0.85)' : 'rgba(159,212,216,0.6)';
-    ctx.lineWidth = R * (p.key === 'saturn' ? 0.2 : 0.06);
-    ctx.beginPath(); ctx.arc(0, 0, R * 1.5, 0, Math.PI*2); ctx.stroke();
-    ctx.restore();
-  }
-}
+// function drawPlanetPreview(canvas, p) {
+//   const ctx = canvas.getContext('2d');
+//   const W = canvas.width, H = canvas.height, R = W * 0.45, cx = W/2, cy = H/2;
+//   ctx.clearRect(0, 0, W, H);
+//   ctx.save();
+//   ctx.beginPath(); ctx.arc(cx, cy, R, 0, Math.PI*2); ctx.clip();
+//   // 下地：用意されたテクスチャ画像があれば中央を正方形に切り出して使い、無ければ手描き
+//   const img = p._tex && p._tex.image;
+//   if (img && img.complete && img.width) {
+//     const s = Math.min(img.width, img.height);
+//     ctx.drawImage(img, (img.width - s) / 2, (img.height - s) / 2, s, s, cx - R, cy - R, R*2, R*2);
+//     // モノクロの模様テクスチャは天体色で着色（3D表示と合わせる）
+//     if (p.tintMap && p.colors) {
+//       ctx.save();
+//       ctx.globalCompositeOperation = 'multiply';
+//       ctx.fillStyle = p.colors[0];
+//       ctx.fillRect(cx - R, cy - R, R*2, R*2);
+//       ctx.restore();
+//     }
+//   } else {
+//     ctx.drawImage(makePlanetTexture(p, 600), cx - R, cy - R, R*2, R*2);
+//   }
+//   // 球体の陰影
+//   const sh = ctx.createRadialGradient(cx - R*0.35, cy - R*0.35, R*0.2, cx, cy, R*1.15);
+//   sh.addColorStop(0, 'rgba(255,255,255,0.25)');
+//   sh.addColorStop(0.5, 'rgba(0,0,0,0)');
+//   sh.addColorStop(1, 'rgba(0,0,0,0.75)');
+//   ctx.fillStyle = sh; ctx.fillRect(cx-R, cy-R, R*2, R*2);
+//   ctx.restore();
+//   // 環 — 地軸の傾きに合わせて向きを変える（天王星はほぼ縦向き）
+//   if (p.ring) {
+//     ctx.save();
+//     ctx.translate(cx, cy);
+//     ctx.rotate(THREE.MathUtils.degToRad(p.tilt || 0));  // 赤道面の傾き
+//     ctx.scale(1, 0.32);                                  // 見込み角による圧縮
+//     ctx.strokeStyle = p.key === 'saturn' ? 'rgba(216,199,154,0.85)' : 'rgba(159,212,216,0.6)';
+//     ctx.lineWidth = R * (p.key === 'saturn' ? 0.2 : 0.06);
+//     ctx.beginPath(); ctx.arc(0, 0, R * 1.5, 0, Math.PI*2); ctx.stroke();
+//     ctx.restore();
+//   }
+// }
 
-popup.querySelector('.close').addEventListener('click', () => popup.classList.remove('show'));
+// popup.querySelector('.close').addEventListener('click', () => popup.classList.remove('show'));
 
 // 選択した惑星にカメラを寄せる
 let focusTarget = null;
