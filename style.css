@@ -1,0 +1,252 @@
+:root {
+    --panel-bg: rgba(12, 16, 28, 0.92);
+    --accent: #6cc5ff;
+}
+* { box-sizing: border-box; }
+html, body {
+    margin: 0;
+    height: 100%;
+    overflow: hidden;
+    background: #05070f;
+    color: #e9eef7;
+    font-family: "Segoe UI", "Hiragino Sans", "Noto Sans JP", system-ui, sans-serif;
+}
+#app { position: fixed; inset: 0; }
+canvas { display: block; }
+
+/* ヘッダー */
+#header {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    padding: 14px 20px;
+    display: flex;
+    align-items: center;
+    gap: 14px;
+    pointer-events: none;
+    z-index: 5;
+}
+#header h1 {
+    margin: 0;
+    font-size: 18px;
+    font-weight: 600;
+    letter-spacing: 0.04em;
+    text-shadow: 0 2px 12px rgba(0,0,0,0.8);
+}
+#header .hint {
+    font-size: 12px;
+    color: #9fb0c8;
+    text-shadow: 0 2px 8px rgba(0,0,0,0.9);
+}
+
+/* コントロールパネル */
+#controls {
+    position: fixed;
+    top: 14px; right: 18px;
+    display: flex;
+    gap: 8px;
+    z-index: 6;
+}
+#controls button {
+    background: var(--panel-bg);
+    color: #cfe0f5;
+    border: 1px solid rgba(108, 197, 255, 0.25);
+    border-radius: 8px;
+    padding: 7px 12px;
+    font-size: 12px;
+    cursor: pointer;
+    backdrop-filter: blur(6px);
+    transition: border-color 0.2s, color 0.2s;
+}
+#controls button:hover { border-color: var(--accent); color: #fff; }
+#controls button.active { border-color: var(--accent); color: var(--accent); }
+
+/* 惑星情報ポップアップ */
+#popup {
+    position: fixed;
+    top: 50%; right: 24px;
+    transform: translateY(-50%) translateX(120%);
+    width: 340px;
+    max-width: calc(100vw - 40px);
+    background: var(--panel-bg);
+    border: 1px solid rgba(108, 197, 255, 0.3);
+    border-radius: 16px;
+    box-shadow: 0 20px 60px rgba(0,0,0,0.6);
+    backdrop-filter: blur(12px);
+    overflow: hidden;
+    opacity: 0;
+    transition: transform 0.45s cubic-bezier(.22,1,.36,1), opacity 0.35s;
+    z-index: 10;
+}
+#popup.show { transform: translateY(-50%) translateX(0); opacity: 1; }
+#popup .preview {
+    height: 180px;
+    position: relative;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    background: radial-gradient(circle at 50% 40%, #1a2030 0%, #060912 100%);
+    overflow: hidden;
+}
+#popup canvas.planet-img {
+    width: 150px; height: 150px;
+    border-radius: 50%;
+    box-shadow: 0 0 50px rgba(0,0,0,0.6), inset -18px -18px 40px rgba(0,0,0,0.55);
+    transition: width 0.3s, height 0.3s;
+}
+/* イメージキャラクター（地球・火星など） */
+#popup .char-img {
+    height: 172px;
+    width: auto;
+    max-width: 46%;
+    object-fit: contain;
+    object-position: bottom;
+    display: none;
+    filter: drop-shadow(0 8px 18px rgba(0,0,0,0.55));
+}
+/* キャラクター画像があるときは惑星を少し小さくして横並びにする */
+#popup .preview.has-character { gap: 4px; align-items: flex-end; padding-top: 8px; }
+#popup .preview.has-character canvas.planet-img { width: 108px; height: 108px; margin-bottom: 26px; }
+#popup .preview.has-character .char-img { display: block; }
+#popup .badge {
+    position: absolute;
+    top: 12px; left: 14px;
+    font-size: 11px;
+    letter-spacing: 0.12em;
+    color: #9fb0c8;
+    text-transform: uppercase;
+}
+#popup .body { padding: 18px 20px 22px; }
+#popup h2 { margin: 0 0 2px; font-size: 22px; }
+#popup .subtitle { color: var(--accent); font-size: 13px; margin-bottom: 12px; }
+#popup p { margin: 0 0 14px; font-size: 13.5px; line-height: 1.7; color: #d4ddec; }
+#popup .facts {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 8px 14px;
+    font-size: 12px;
+}
+#popup .facts div { display: flex; flex-direction: column; gap: 2px; }
+#popup .facts .label { color: #8195af; font-size: 10.5px; letter-spacing: 0.05em; }
+#popup .facts .value { color: #eef3fb; font-weight: 600; }
+  /* キャラクター紹介（性格・設定）— 吹き出し風のカード */
+#popup .char-desc {
+    display: none;
+    margin-top: 16px;
+    padding: 12px 14px;
+    background: linear-gradient(180deg, rgba(108,197,255,0.10), rgba(108,197,255,0.04));
+    border: 1px solid rgba(108,197,255,0.22);
+    border-left: 3px solid var(--accent);
+    border-radius: 10px;
+}
+#popup .char-desc.show { display: block; }
+#popup .char-desc .cd-label {
+    display: inline-flex; align-items: center; gap: 5px;
+    font-size: 10.5px; font-weight: 700; letter-spacing: 0.08em;
+    color: var(--accent);
+    margin-bottom: 6px;
+}
+#popup .char-desc .cd-text {
+    margin: 0;
+    font-size: 13px; line-height: 1.75; color: #e7eef8;
+}
+#popup .close {
+    position: absolute;
+    top: 10px; right: 12px;
+    width: 28px; height: 28px;
+    border-radius: 50%;
+    border: none;
+    background: rgba(255,255,255,0.08);
+    color: #cfe0f5;
+    font-size: 16px;
+    cursor: pointer;
+    line-height: 1;
+  }
+#popup .close:hover { background: rgba(255,255,255,0.18); }
+
+  /* ローディング */
+#loading {
+    position: fixed; inset: 0;
+    display: flex; align-items: center; justify-content: center;
+    background: #05070f;
+    color: #6cc5ff;
+    font-size: 14px;
+    letter-spacing: 0.1em;
+    z-index: 50;
+    transition: opacity 0.6s;
+  }
+#loading.hide { opacity: 0; pointer-events: none; }
+
+  /* テクスチャのライセンス表記 */
+#credit {
+    position: fixed;
+    left: 14px; bottom: 10px;
+    font-size: 11px;
+    color: #8195af;
+    text-shadow: 0 1px 6px rgba(0,0,0,0.9);
+    z-index: 6;
+}
+  #credit a { color: #9fb0c8; text-decoration: none; border-bottom: 1px dotted rgba(159,176,200,0.5); }
+  #credit a:hover { color: var(--accent); border-bottom-color: var(--accent); }
+
+  /* ツールチップ（ホバー時の惑星名） */
+#tooltip {
+    position: fixed;
+    padding: 4px 9px;
+    background: rgba(0,0,0,0.78);
+    border: 1px solid rgba(108,197,255,0.4);
+    border-radius: 6px;
+    font-size: 12px;
+    color: #e9eef7;
+    pointer-events: none;
+    opacity: 0;
+    transform: translate(-50%, -140%);
+    transition: opacity 0.15s;
+    white-space: nowrap;
+    z-index: 8;
+}
+body {
+    font-family: "Noto Sans JP"
+}
+
+.fixed {
+    position: fixed;
+}
+
+.black {
+    font-weight: 900;
+}
+
+.semibold {
+    font-weight: 600;
+}
+
+.regular {
+    font-weight: 400;
+}
+
+.light {
+    font-weight: 200;
+}
+
+.bottom-left {
+    transform: translate( 2vw, -2vw );
+    bottom: 0px;
+    left: 0px;
+}
+
+.bottom-right {
+    transform: translate( -2vw, -2vw );
+    bottom: 0px;
+    right: 0px;
+}
+
+.top-left {
+    transform: translate( 2vw, 4vw );
+    top: 0px;
+    left: 0px;
+}
+.top-right {
+    transform: translate( -2vw, 0vw );
+    top: 0px;
+    right: 0px;
+}
